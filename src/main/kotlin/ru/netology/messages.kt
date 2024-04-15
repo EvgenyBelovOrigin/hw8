@@ -1,9 +1,9 @@
 package ru.netology
 
-data class Chat(val chatId: Int?, val usersId: List<Int>)
+data class Chat(val chatId: Int, val usersId: List<Int>)
 
 data class Message(
-    val chatId: Int?,
+    val chat: Chat,
     val messageId: Int,
     val fromId: Int,
     val tooId: Int,
@@ -32,7 +32,7 @@ object ChatService {
 
     fun sendMessage(message: String, fromId: Int, toId: Int): Int {
         if (toId == fromId) throw CantSendMessageToYourselfException("You can't send message to yourself")
-        if (chats.none { it.usersId.containsAll(listOf(fromId, toId)) }) chats.add(
+        chats.firstOrNull { it.usersId.containsAll(listOf(fromId, toId)) } ?: chats.add(
             Chat(
                 ++chatLastId, listOf(fromId, toId)
             )
@@ -40,7 +40,7 @@ object ChatService {
 
         messages.add(
             Message(
-                chatId = chats.find { it.usersId.containsAll(listOf(fromId, toId)) }?.chatId,
+                chat = chats.first { it.usersId.containsAll(listOf(fromId, toId)) },
                 messageId = ++messageLastID,
                 fromId = fromId,
                 tooId = toId,
@@ -52,76 +52,65 @@ object ChatService {
     }
 
     fun editMessage(messageId: Int, message: String): Boolean {
-        if (messages.none { it.messageId == messageId }) throw MessageNotFoundException("message with messageId $messageId not found")
-        messages.find { it.messageId == messageId }?.message = message
+        messages.firstOrNull() { it.messageId == messageId }
+            ?: throw MessageNotFoundException("message with messageId $messageId not found")
+        messages.first { it.messageId == messageId }.message = message
         return true
     }
 
     fun deleteMessage(messageId: Int): Boolean {
-        if (messages.none { it.messageId == messageId }) throw MessageNotFoundException("message with messageId $messageId not found")
+        messages.firstOrNull { it.messageId == messageId }
+            ?: throw MessageNotFoundException("message with messageId $messageId not found")
         messages.removeIf { it.messageId == messageId }
         return true
     }
 
     fun deleteChat(chatId: Int): Boolean {
-        if (messages.none { it.chatId == chatId }) throw ChatNotFoundException("Chat with chatId $chatId not found")
-        messages.removeIf { it.chatId == chatId }
+        chats.firstOrNull { it.chatId == chatId } ?: throw ChatNotFoundException("Chat with chatId $chatId not found")
+        messages.removeIf { it.chat.chatId == chatId }
         chats.removeIf { it.chatId == chatId }
         return true
 
     }
 
     fun readMessage(messageId: Int): Boolean {
-        if (messages.none { it.messageId == messageId }) throw MessageNotFoundException("message with messageId $messageId not found")
-        messages.find { it.messageId == messageId }?.isRead = true
+        messages.firstOrNull() { it.messageId == messageId }
+            ?: throw MessageNotFoundException("message with messageId $messageId not found")
+        messages.first { it.messageId == messageId }.isRead = true
         return true
+    }
+
+
+    fun getChats(): Map<Chat, List<Message>> {
+
+        return messages.groupBy { it.chat }
 
     }
 
 
-    fun getChats(userId: Int): Map<Chat, List<Message>> {
-        if (chats.firstOrNull { it.usersId.contains(userId) } == null && userId > 0)
-            throw UserNotFoundException("User with ID $userId not found")
+    fun getUnreadChatsCount(): Int {
 
-        val messagesFilteredByUserId = if (userId > 0) messages.filter { message ->
-            message.chatId in chats.filter { it.usersId.contains(userId) }.groupBy { it.chatId }.keys
-        }.toMutableList() else messages
-
-
-        return messagesFilteredByUserId.sortedWith(compareBy<Message> { it.chatId }.thenByDescending { it.messageId })
-            .groupBy { Chat(it.chatId, chats.first { chat -> chat.chatId == it.chatId }.usersId) }
+        return messages.filter { it.isRead == false }.associateBy { it.chat }.size
 
     }
 
 
-//    fun getUnreadChatsCount(): Int {
-//        val setOfChatsWithUnreadMessages = mutableSetOf<Int>()
-//        messages.forEach { if (it.isRead == false) setOfChatsWithUnreadMessages.add(it.chatId) }
-//        return setOfChatsWithUnreadMessages.size
-//
-//    }
+    fun getChatLastMessages(): Map<Chat, String> {
 
-//    fun getChatLastMessages(chatId: Int): List<Any> {
-//        if (chats.none { it.chatId == chatId }) throw ChatNotFoundException("Chat with chatId $chatId not found")
-//        if (messages.none { it.chatId == chatId }) return listOf("No messages")
-//        return messages.sortedByDescending { it.messageId }.filter { it.chatId == chatId }
-//
-//    }
+        return chats.associateBy(keySelector = { it },
+            valueTransform = {
+                messages.lastOrNull { message -> message.chat == it }?.message ?: "No Messages"
+            })
 
-//    fun getMessagesByPeerId(peerId: Int, quantityOfMessages: Int): List<Message> {
-//        if (messages.none { it.tooId == peerId }) throw PeerNotFoundException("Peer with peerId $peerId not found")
-//        val messagesList = mutableListOf<Message>()
-//        var countMessages = 1
-//        messages.forEachIndexed() { index, it ->
-//            if (it.tooId == peerId && countMessages <= quantityOfMessages) {
-//                messages[index].isRead = true
-//                messagesList.add(it)
-//                ++countMessages
-//
-//            }
-//        }
-//        return messagesList.sortedByDescending { it.messageId }
-//    }
+
+    }
+
+    fun getMessagesByUserId(userId: Int, quantityOfMessages: Int): List<Message> {
+        chats.firstOrNull { it.usersId.contains(userId) }
+            ?: throw UserNotFoundException("User with ID $userId not found")
+
+        return messages.filter { it.chat.usersId.contains(userId) }.take(quantityOfMessages).onEach { it.isRead = true }
+    }
 
     fun print() {
         messages.forEach { (println(it)) }
