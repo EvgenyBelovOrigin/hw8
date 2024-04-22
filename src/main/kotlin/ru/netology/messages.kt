@@ -52,17 +52,18 @@ object ChatService {
     }
 
     fun editMessage(messageId: Int, message: String): Boolean {
-        messages.firstOrNull() { it.messageId == messageId }
-            ?: throw MessageNotFoundException("message with messageId $messageId not found")
-        messages.first { it.messageId == messageId }.message = message
+
+        messages.firstOrNull { it.messageId == messageId }
+            .let { it ?: throw MessageNotFoundException("message with messageId $messageId not found") }
+            .message = message
         return true
     }
 
     fun deleteMessage(messageId: Int): Boolean {
-        messages.firstOrNull { it.messageId == messageId }
-            ?: throw MessageNotFoundException("message with messageId $messageId not found")
-        messages.removeIf { it.messageId == messageId }
-        return true
+
+        return if (messages.removeIf { it.messageId == messageId }) true
+        else throw MessageNotFoundException("message with messageId $messageId not found")
+
     }
 
     fun deleteChat(chatId: Int): Boolean {
@@ -83,24 +84,23 @@ object ChatService {
 
     fun getChats(): Map<Chat, List<Message>> {
 
-        return messages.groupBy { it.chat }
+        return messages.asSequence().groupBy { it.chat }
 
     }
 
 
     fun getUnreadChatsCount(): Int {
 
-        return messages.filter { it.isRead == false }.associateBy { it.chat }.size
+        return messages.asSequence().filter { !it.isRead }.associateBy { it.chat }.size
 
     }
 
 
     fun getChatLastMessages(): Map<Chat, String> {
 
-        return chats.associateBy(keySelector = { it },
-            valueTransform = {
-                messages.lastOrNull { message -> message.chat == it }?.message ?: "No Messages"
-            })
+        return chats.asSequence().associateBy(keySelector = { it }, valueTransform = {
+            messages.lastOrNull { message -> message.chat == it }?.message ?: "No Messages"
+        })
 
 
     }
@@ -109,13 +109,9 @@ object ChatService {
         chats.firstOrNull { it.usersId.contains(userId) }
             ?: throw UserNotFoundException("User with ID $userId not found")
 
-        return messages.filter { it.chat.usersId.contains(userId) }.take(quantityOfMessages).onEach { it.isRead = true }
+        return messages.asSequence().filter { it.chat.usersId.contains(userId) }.take(quantityOfMessages)
+            .onEach { it.isRead = true }.toList()
     }
 
-    fun print() {
-        messages.forEach { (println(it)) }
-        println()
-        chats.forEach { println(it) }
-    }
 
 }
